@@ -34,19 +34,24 @@ fn main() {
 }
 
 fn handle_watch_event(event: DebouncedEvent, matching_files: &RegexSet) {
-    let matching_event: Option<String> = match event {
-        NoticeWrite(path) => {
-            if is_path_matched(&path, matching_files) {
-                Some(path_to_str(&path))
-            } else {
-                None
-            }
-        }
+    let event_path: Option<String> = match event {
+        NoticeWrite(path) => extract_event_path(path, matching_files),
         _ => None,
     };
 
-    if matching_event.is_some() {
-        println!("{:?} written", matching_event.unwrap())
+    if event_path.is_some() {
+        println!("{:?} written", event_path.unwrap())
+    }
+}
+
+fn extract_event_path(
+    path: PathBuf,
+    matching_files: &RegexSet,
+) -> Option<String> {
+    if is_path_matched(&path, matching_files) {
+        Some(path_to_str(&path))
+    } else {
+        None
     }
 }
 
