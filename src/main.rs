@@ -3,7 +3,7 @@ extern crate notify;
 use notify::DebouncedEvent::NoticeWrite;
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -34,28 +34,29 @@ fn main() {
 }
 
 fn handle_watch_event(event: DebouncedEvent, matching_files: &RegexSet) {
-    let event_path: Option<String> = match event {
-        NoticeWrite(path) => extract_event_path(path, matching_files),
+    let event_data: Option<(String, String)> = match event {
+        NoticeWrite(path) => extract_event_data("write", &path, matching_files),
         _ => None,
     };
 
-    if event_path.is_some() {
-        println!("{:?} written", event_path.unwrap())
+    if event_data.is_some() {
+        println!("{:?}", event_data.unwrap())
     }
 }
 
-fn extract_event_path(
-    path: PathBuf,
+fn extract_event_data(
+    event_desc: &str,
+    path: &Path,
     matching_files: &RegexSet,
-) -> Option<String> {
+) -> Option<(String, String)> {
     if is_path_matched(&path, matching_files) {
-        Some(path_to_str(&path))
+        Some((event_desc.to_string(), path_to_str(&path)))
     } else {
         None
     }
 }
 
-fn is_path_matched(path: &PathBuf, matching_files: &RegexSet) -> bool {
+fn is_path_matched(path: &Path, matching_files: &RegexSet) -> bool {
     return matching_files.is_match(&path_to_str(&path));
 }
 
