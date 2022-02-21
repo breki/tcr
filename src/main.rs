@@ -1,6 +1,9 @@
 extern crate notify;
 
-use notify::DebouncedEvent::NoticeWrite;
+use notify::DebouncedEvent::Create;
+use notify::DebouncedEvent::Remove;
+use notify::DebouncedEvent::Rename;
+use notify::DebouncedEvent::Write;
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
 use std::path::Path;
@@ -27,15 +30,20 @@ fn main() {
 
     loop {
         match rx.recv() {
-            Ok(event) => handle_watch_event(event, &matching_files),
+            Ok(event) => handle_watch_event(&event, &matching_files),
             Err(e) => println!("watch error: {:?}", e),
         }
     }
 }
 
-fn handle_watch_event(event: DebouncedEvent, matching_files: &RegexSet) {
+fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
     let event_data: Option<(String, String)> = match event {
-        NoticeWrite(path) => extract_event_data("write", &path, matching_files),
+        Create(path) => extract_event_data("create", &path, matching_files),
+        Remove(path) => extract_event_data("remove", &path, matching_files),
+        Rename(from_path, _) => {
+            extract_event_data("rename", &from_path, matching_files)
+        }
+        Write(path) => extract_event_data("write", &path, matching_files),
         _ => None,
     };
 
