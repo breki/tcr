@@ -1,32 +1,45 @@
 extern crate notify;
 
-use notify::DebouncedEvent::Create;
-use notify::DebouncedEvent::Remove;
-use notify::DebouncedEvent::Rename;
-use notify::DebouncedEvent::Write;
+use clap::Parser;
+use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
 use std::path::Path;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
+#[derive(Parser, Debug)]
+struct Args {
+    /// path to watch
+    #[clap(short, long, default_value = ".")]
+    path: String,
+
+    /// pattern of files to watch
+    #[clap(short, long, default_value = r".*.\.rs$")]
+    file_pattern: String,
+
+    /// delay (in milliseconds) before executing the tests
+    #[clap(short, long, default_value = "1000")]
+    delay: u64,
+}
+
 fn main() {
-    let matching_files = RegexSet::new(&[r".*.\.rs$"]).unwrap();
+    let args = Args::parse();
+
+    let matching_files = RegexSet::new(&[args.file_pattern]).unwrap();
 
     // Create a channel to receive the events.
     let (tx, rx) = channel();
 
     // Create a watcher object, delivering debounced events.
     // The notification back-end is selected based on the platform.
-    let watch_period = Duration::from_secs(2);
+    let watch_period = Duration::from_millis(args.delay);
 
     let mut watcher = watcher(tx, watch_period).unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
-    watcher
-        .watch("d:\\src\\tcr", RecursiveMode::Recursive)
-        .unwrap();
+    watcher.watch(args.path, RecursiveMode::Recursive).unwrap();
 
     loop {
         match rx.recv() {
