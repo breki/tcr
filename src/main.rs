@@ -9,6 +9,10 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 #[derive(Parser, Debug)]
+#[clap(name = "tcr")]
+#[clap(author = "Igor Brejc")]
+#[clap(version = "1.0")]
+#[clap(about = "Helps run 'test && commit || revert' workflow")]
 struct Args {
     /// path to watch
     #[clap(short, long, default_value = ".")]
