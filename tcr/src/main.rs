@@ -73,6 +73,8 @@ fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
         println!("TEST");
         let output = Command::new("cargo")
             .arg("test")
+            .arg("--package")
+            .arg("dummy-tests")
             .output()
             .expect("failed to execute process");
 
