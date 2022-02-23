@@ -4,7 +4,10 @@ use clap::Parser;
 use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
+use std::io;
+use std::io::Write as IoWrite;
 use std::path::Path;
+use std::process::Command;
 use std::sync::mpsc::channel;
 use std::time::Duration;
 
@@ -65,8 +68,16 @@ fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
     };
 
     if event_data.is_some() {
-        println!("{:?}", event_data.unwrap())
+        println!("{:?}", event_data.unwrap());
         // todo now: run the test step
+        println!("TEST");
+        let output = Command::new("cargo")
+            .arg("test")
+            .output()
+            .expect("failed to execute process");
+
+        io::stdout().write_all(&output.stdout).unwrap();
+        io::stderr().write_all(&output.stderr).unwrap();
     }
 }
 
