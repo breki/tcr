@@ -66,6 +66,7 @@ fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
 
     if event_data.is_some() {
         println!("{:?}", event_data.unwrap())
+        // todo now: run the test step
     }
 }
 
