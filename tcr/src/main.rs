@@ -17,21 +17,27 @@ use std::time::Duration;
 #[clap(version = "1.0")]
 #[clap(about = "Helps run 'test && commit || revert' workflow")]
 struct Args {
-    /// path to watch
+    /// Program or script to run as a test step. Does nothing if not specified.
+    #[clap(short, long)]
+    test: Option<String>,
+
+    /// Path to watch.
     #[clap(short, long, default_value = ".")]
     path: String,
 
-    /// pattern of files to watch
+    /// Pattern of files to watch.
     #[clap(short, long, default_value = r".*.\.rs$")]
     file_pattern: String,
 
-    /// delay (in milliseconds) before executing the tests
+    /// Delay (in milliseconds) before executing the tests.
     #[clap(short, long, default_value = "1000")]
     delay: u64,
 }
 
 fn main() {
     let args = Args::parse();
+
+    let test_step = args.test;
 
     let matching_files = RegexSet::new(&[args.file_pattern]).unwrap();
 
@@ -50,13 +56,20 @@ fn main() {
 
     loop {
         match rx.recv() {
-            Ok(event) => handle_watch_event(&event, &matching_files),
+            Ok(event) => {
+                handle_watch_event(&event, &matching_files, &test_step)
+            }
             Err(e) => println!("watch error: {:?}", e),
         }
     }
 }
 
-fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
+// todo now: collect all of the updates and then run TCR
+fn handle_watch_event(
+    event: &DebouncedEvent,
+    matching_files: &RegexSet,
+    test_step: &Option<String>,
+) {
     let event_data: Option<(String, String)> = match event {
         Create(path) => extract_event_data("create", &path, matching_files),
         Remove(path) => extract_event_data("remove", &path, matching_files),
@@ -69,17 +82,28 @@ fn handle_watch_event(event: &DebouncedEvent, matching_files: &RegexSet) {
 
     if event_data.is_some() {
         println!("{:?}", event_data.unwrap());
-        // todo now: run the test step
+        // todo now: redesign the test step as an external command
+        // that needs to be run + additional arguments provided after the '--'
+        // argument
         println!("TEST");
-        let output = Command::new("cargo")
-            .arg("test")
-            .arg("--package")
-            .arg("dummy-tests")
-            .output()
-            .expect("failed to execute process");
 
-        io::stdout().write_all(&output.stdout).unwrap();
-        io::stderr().write_all(&output.stderr).unwrap();
+        match test_step {
+            Some(test_command) => {
+                let output = Command::new(test_command)
+                    .output()
+                    .expect("failed to execute process");
+
+                io::stdout().write_all(&output.stdout).unwrap();
+                io::stderr().write_all(&output.stderr).unwrap();
+
+                // todo now: check the test exit code.
+                // In case of success, run commit.
+                // In case of failure, run reset.
+            }
+            None => {
+                println!("The test step has not been specified, doing nothing.")
+            }
+        }
     }
 }
 
