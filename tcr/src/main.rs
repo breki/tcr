@@ -1,6 +1,6 @@
 extern crate notify;
 
-use clap::{arg, Arg, Command as ClapCommand};
+use clap::{arg, Arg, Command as ClapCommand, Values};
 use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
@@ -12,54 +12,19 @@ use std::sync::mpsc::channel;
 use std::time::Duration;
 
 fn main() {
-    let matches = ClapCommand::new("tcr")
-        .trailing_var_arg(true)
-        .version("1.0")
-        .author("Igor Brejc")
-        .about("Runs 'test && commit || revert' workflow.")
-        .arg(
-            Arg::new("TEST STEP")
-                .long("test")
-                .short('t')
-                .required(false)
-                .help(
-                    "The command to run as a test step. If not specified, \
-                    only a warning will be printed during the test step.",
-                )
-                .display_order(1),
-        )
-        .arg(
-            arg!(-p --path <PATH>)
-                .required(false)
-                .default_value(".")
-                .help("The path to watch for file changes.")
-                .display_order(2),
-        )
-        .arg(
-            Arg::new("FILE PATTERN")
-                .long("file-pattern")
-                .short('f')
-                .required(false)
-                .default_value(".*.rs")
-                .help(
-                    "The regex file pattern which changed/created/deleted \
-                    files must match to trigger the test step.",
-                )
-                .display_order(3),
-        )
-        .arg(
-            arg!(-d --delay <DELAY>)
-                .required(false)
-                .default_value("1000")
-                .help(
-                    "The delay (in milliseconds) between the first detected k\
-                    file change and running the test step.",
-                )
-                .validator(|s| s.parse::<u64>()),
-        )
-        .get_matches();
+    let matches = parse_args();
 
-    let test_step = matches.value_of("test");
+    let test_step = matches.value_of("TEST STEP");
+    println!("Test step: {}", test_step.unwrap_or("<none>"));
+
+    let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
+
+    let xxx = match test_cmd_args {
+        Some(ref args) => args.len(),
+        None => 0,
+    };
+    println!("Test command args len: {}", xxx);
+
     let file_pattern = matches.value_of("FILE PATTERN").unwrap();
 
     let matching_files = RegexSet::new(&[file_pattern]).unwrap();
@@ -85,11 +50,73 @@ fn main() {
     loop {
         match rx.recv() {
             Ok(event) => {
-                handle_watch_event(&event, &matching_files, &test_step)
+                handle_watch_event(
+                    &event,
+                    &matching_files,
+                    &test_step,
+                    &test_cmd_args,
+                );
             }
             Err(e) => println!("watch error: {:?}", e),
         }
     }
+}
+
+fn parse_args() -> clap::ArgMatches {
+    let matches = ClapCommand::new("tcr")
+        .trailing_var_arg(true)
+        .version("1.0")
+        .author("Igor Brejc")
+        .about("Runs 'test && commit || revert' workflow.")
+        .arg(
+            Arg::new("TEST STEP")
+                .long("test")
+                .short('t')
+                .required(false)
+                .takes_value(true)
+                .help(
+                    "The command to run as a test step. If not specified, \
+                    only a warning will be printed during the test step.",
+                )
+                .display_order(1),
+        )
+        .arg(
+            arg!(-p --path <PATH>)
+                .required(false)
+                .default_value(".")
+                .help("The path to watch for file changes.")
+                .display_order(2),
+        )
+        .arg(
+            Arg::new("FILE PATTERN")
+                .long("file-pattern")
+                .short('f')
+                .required(false)
+                .default_value(".*.rs")
+                .requires("TEST STEP")
+                .help(
+                    "The regex file pattern which changed/created/deleted \
+                    files must match to trigger the test step.",
+                )
+                .display_order(3),
+        )
+        .arg(
+            arg!(-d --delay <DELAY>)
+                .required(false)
+                .default_value("1000")
+                .help(
+                    "The delay (in milliseconds) between the first detected k\
+                    file change and running the test step.",
+                )
+                .validator(|s| s.parse::<u64>()),
+        )
+        .arg(
+            Arg::new("TEST COMMAND ARGS")
+                .multiple_values(true)
+                .required(false),
+        )
+        .get_matches();
+    matches
 }
 
 // todo now: collect all of the updates and then run TCR
@@ -97,6 +124,7 @@ fn handle_watch_event(
     event: &DebouncedEvent,
     matching_files: &RegexSet,
     test_step: &Option<&str>,
+    test_cmd_args: &Option<Values>,
 ) {
     let event_data: Option<(String, String)> = match event {
         Create(path) => extract_event_data("create", &path, matching_files),
@@ -110,22 +138,37 @@ fn handle_watch_event(
 
     if event_data.is_some() {
         println!("{:?}", event_data.unwrap());
-        // todo now: how to support the '--' argument separator?
         println!("TEST");
 
         match test_step {
-            Some(test_command) => run_test(test_command),
-            None => {
+            Some(test_command) => run_test(test_command, test_cmd_args),
+            _ => {
                 println!("The test step has not been specified, doing nothing.")
             }
         }
     }
 }
 
-fn run_test(test_command: &str) {
-    let output = Command::new(test_command)
-        .output()
-        .expect("failed to execute the test step");
+fn run_test(test_command: &str, test_cmd_args: &Option<Values>) {
+    let mut command = Command::new(test_command);
+
+    let args_str: Option<Vec<String>> = match test_cmd_args {
+        Some(args) => {
+            let args_str = args
+                .clone()
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect::<Vec<String>>();
+            Some(args_str)
+        }
+        None => None,
+    };
+
+    if args_str.is_some() {
+        command.args(args_str.unwrap());
+    }
+
+    let output = command.output().expect("failed to execute the test step");
     io::stdout().write_all(&output.stdout).unwrap();
     io::stderr().write_all(&output.stderr).unwrap();
     // todo now: check the test exit code.
