@@ -8,8 +8,9 @@ use std::io::Write as IoWrite;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::channel;
+use std::sync::Mutex;
 use std::time::Duration;
-use std::{fmt, io};
+use std::{fmt, io, thread};
 
 struct SourceCodeUpdateEvent {
     path: String,
@@ -30,6 +31,7 @@ fn main() {
 
     let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
 
+    // todo now: remove this
     let xxx = match test_cmd_args {
         Some(ref args) => args.len(),
         None => 0,
@@ -39,6 +41,14 @@ fn main() {
     let file_pattern = matches.value_of("FILE PATTERN").unwrap();
 
     let matching_files = RegexSet::new(&[file_pattern]).unwrap();
+
+    let collected_events: Mutex<Vec<SourceCodeUpdateEvent>> =
+        Mutex::new(Vec::new());
+
+    thread::spawn(|| loop {
+        println!("SLEEPER THREAD");
+        thread::sleep(Duration::from_millis(5000));
+    });
 
     // Create a channel to receive the events.
     let (tx, rx) = channel();
@@ -58,8 +68,6 @@ fn main() {
         .watch(path_to_watch, RecursiveMode::Recursive)
         .unwrap();
 
-    let mut collected_events: Vec<SourceCodeUpdateEvent> = Vec::new();
-
     loop {
         match rx.recv() {
             Ok(event) => {
@@ -67,11 +75,13 @@ fn main() {
                 // they should be stored in a collection and handled in a single
                 // go, as soon as the 'delay' period from the first event time
                 // has passed.
+                let mut collected_events = collected_events.lock().unwrap();
+
                 handle_watch_event(
                     &event,
                     &matching_files,
-                    &test_step,
-                    &test_cmd_args,
+                    // &test_step,
+                    // &test_cmd_args,
                     &mut collected_events,
                 );
             }
@@ -141,8 +151,8 @@ fn parse_args() -> clap::ArgMatches {
 fn handle_watch_event(
     event: &DebouncedEvent,
     matching_files: &RegexSet,
-    test_step: &Option<&str>,
-    test_cmd_args: &Option<Values>,
+    // test_step: &Option<&str>,
+    // test_cmd_args: &Option<Values>,
     collected_events: &mut Vec<SourceCodeUpdateEvent>,
 ) {
     let event_data: Option<SourceCodeUpdateEvent> = match event {
