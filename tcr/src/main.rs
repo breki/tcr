@@ -4,12 +4,23 @@ use clap::{arg, Arg, Command as ClapCommand, Values};
 use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
-use std::io;
 use std::io::Write as IoWrite;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::channel;
 use std::time::Duration;
+use std::{fmt, io};
+
+struct SourceCodeUpdateEvent {
+    path: String,
+    event_type: String,
+}
+
+impl fmt::Display for SourceCodeUpdateEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {}", self.event_type, self.path)
+    }
+}
 
 fn main() {
     let matches = parse_args();
@@ -47,14 +58,21 @@ fn main() {
         .watch(path_to_watch, RecursiveMode::Recursive)
         .unwrap();
 
+    let mut collected_events: Vec<SourceCodeUpdateEvent> = Vec::new();
+
     loop {
         match rx.recv() {
             Ok(event) => {
+                // todo now: Instead of directly handling each individual event,
+                // they should be stored in a collection and handled in a single
+                // go, as soon as the 'delay' period from the first event time
+                // has passed.
                 handle_watch_event(
                     &event,
                     &matching_files,
                     &test_step,
                     &test_cmd_args,
+                    &mut collected_events,
                 );
             }
             Err(e) => println!("watch error: {:?}", e),
@@ -125,8 +143,9 @@ fn handle_watch_event(
     matching_files: &RegexSet,
     test_step: &Option<&str>,
     test_cmd_args: &Option<Values>,
+    collected_events: &mut Vec<SourceCodeUpdateEvent>,
 ) {
-    let event_data: Option<(String, String)> = match event {
+    let event_data: Option<SourceCodeUpdateEvent> = match event {
         Create(path) => extract_event_data("create", &path, matching_files),
         Remove(path) => extract_event_data("remove", &path, matching_files),
         Rename(from_path, _) => {
@@ -136,16 +155,21 @@ fn handle_watch_event(
         _ => None,
     };
 
-    if event_data.is_some() {
-        println!("{:?}", event_data.unwrap());
-        println!("TEST");
+    match event_data {
+        Some(event_data) => {
+            println!("{}", event_data);
+            collected_events.push(event_data);
 
-        match test_step {
-            Some(test_command) => run_test(test_command, test_cmd_args),
-            _ => {
-                println!("The test step has not been specified, doing nothing.")
-            }
+            // println!("TEST");
+
+            // match test_step {
+            //     Some(test_command) => run_test(test_command, test_cmd_args),
+            //     _ => {
+            //         println!("The test step has not been specified, doing nothing.")
+            //     }
+            // }
         }
+        None => (),
     }
 }
 
@@ -168,6 +192,8 @@ fn run_test(test_command: &str, test_cmd_args: &Option<Values>) {
         command.args(args_str.unwrap());
     }
 
+    // todo now: print out the running command
+
     let output = command.output().expect("failed to execute the test step");
     io::stdout().write_all(&output.stdout).unwrap();
     io::stderr().write_all(&output.stderr).unwrap();
@@ -180,9 +206,12 @@ fn extract_event_data(
     event_desc: &str,
     path: &Path,
     matching_files: &RegexSet,
-) -> Option<(String, String)> {
+) -> Option<SourceCodeUpdateEvent> {
     if is_path_matched(&path, matching_files) {
-        Some((event_desc.to_string(), path_to_str(&path)))
+        Some(SourceCodeUpdateEvent {
+            path: path_to_str(&path),
+            event_type: event_desc.to_string(),
+        })
     } else {
         None
     }
