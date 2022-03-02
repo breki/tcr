@@ -1,6 +1,6 @@
 extern crate notify;
 
-use clap::{arg, Arg, Command as ClapCommand, Values};
+use clap::{arg, Arg, ArgMatches, Command as ClapCommand};
 use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
@@ -8,7 +8,7 @@ use std::io::Write as IoWrite;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc::channel;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{fmt, io, thread};
 
@@ -26,28 +26,58 @@ impl fmt::Display for SourceCodeUpdateEvent {
 fn main() {
     let matches = parse_args();
 
-    let test_step = matches.value_of("TEST STEP");
-    println!("Test step: {}", test_step.unwrap_or("<none>"));
-
-    let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
-
-    // todo now: remove this
-    let xxx = match test_cmd_args {
-        Some(ref args) => args.len(),
-        None => 0,
-    };
-    println!("Test command args len: {}", xxx);
-
+    let test_step = get_test_step(&matches);
+    let test_cmd_args = get_test_cmd_args(&matches);
     let file_pattern = matches.value_of("FILE PATTERN").unwrap();
 
     let matching_files = RegexSet::new(&[file_pattern]).unwrap();
 
-    let collected_events: Mutex<Vec<SourceCodeUpdateEvent>> =
-        Mutex::new(Vec::new());
+    let delay = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
+    let watch_period = Duration::from_millis(delay);
 
-    thread::spawn(|| loop {
+    let collected_events: Arc<Mutex<Vec<SourceCodeUpdateEvent>>> =
+        Arc::new(Mutex::new(Vec::new()));
+    let (tx_collected_events, rx_collected_events) = channel();
+
+    let collected_events_thread = Arc::clone(&collected_events);
+    thread::spawn(move || loop {
+        {
+            let mut collected_events = collected_events_thread.lock().unwrap();
+
+            let mut events_to_process: Vec<SourceCodeUpdateEvent> = Vec::new();
+            while collected_events.len() > 0 {
+                let event = collected_events.pop().unwrap();
+                events_to_process.push(event);
+            }
+            match tx_collected_events.send(events_to_process) {
+                Ok(_) => (),
+                Err(e) => {
+                    println!("Error sending source code change events: {}", e);
+                }
+            }
+        }
+
         println!("SLEEPER THREAD");
-        thread::sleep(Duration::from_millis(5000));
+        thread::sleep(watch_period);
+    });
+
+    thread::spawn(move || loop {
+        match rx_collected_events.recv() {
+            Ok(ref x) if !x.is_empty() => {
+                println!("TEST");
+
+                match test_step {
+                    Some(ref test_command) => {
+                        run_test(&test_command, &test_cmd_args)
+                    }
+                    _ => {
+                        println!("The test step has not been specified, doing nothing.")
+                    }
+                }
+            }
+            Ok(_) => (),
+            Err(e) => println!("watch error: {:?}", e),
+        }
     });
 
     // Create a channel to receive the events.
@@ -55,8 +85,6 @@ fn main() {
 
     // Create a watcher object, delivering debounced events.
     // The notification back-end is selected based on the platform.
-    let delay = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
-    let watch_period = Duration::from_millis(delay);
 
     let mut watcher = watcher(tx, watch_period).unwrap();
 
@@ -147,12 +175,29 @@ fn parse_args() -> clap::ArgMatches {
     matches
 }
 
-// todo now: collect all of the updates and then run TCR
+fn get_test_step(matches: &ArgMatches) -> Option<String> {
+    return matches.value_of("TEST STEP").map(|s| s.to_owned());
+}
+
+fn get_test_cmd_args(matches: &ArgMatches) -> Option<Vec<String>> {
+    let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
+
+    return match test_cmd_args {
+        Some(args) => {
+            let args_str = args
+                .clone()
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect::<Vec<String>>();
+            Some(args_str)
+        }
+        None => None,
+    };
+}
+
 fn handle_watch_event(
     event: &DebouncedEvent,
     matching_files: &RegexSet,
-    // test_step: &Option<&str>,
-    // test_cmd_args: &Option<Values>,
     collected_events: &mut Vec<SourceCodeUpdateEvent>,
 ) {
     let event_data: Option<SourceCodeUpdateEvent> = match event {
@@ -169,37 +214,19 @@ fn handle_watch_event(
         Some(event_data) => {
             println!("{}", event_data);
             collected_events.push(event_data);
-
-            // println!("TEST");
-
-            // match test_step {
-            //     Some(test_command) => run_test(test_command, test_cmd_args),
-            //     _ => {
-            //         println!("The test step has not been specified, doing nothing.")
-            //     }
-            // }
         }
         None => (),
     }
 }
 
-fn run_test(test_command: &str, test_cmd_args: &Option<Values>) {
+fn run_test(test_command: &str, test_cmd_args: &Option<Vec<String>>) {
     let mut command = Command::new(test_command);
 
-    let args_str: Option<Vec<String>> = match test_cmd_args {
-        Some(args) => {
-            let args_str = args
-                .clone()
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect::<Vec<String>>();
-            Some(args_str)
+    match test_cmd_args {
+        Some(ref args) => {
+            command.args(args);
         }
-        None => None,
-    };
-
-    if args_str.is_some() {
-        command.args(args_str.unwrap());
+        None => (),
     }
 
     // todo now: print out the running command
