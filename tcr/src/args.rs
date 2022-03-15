@@ -1,6 +1,6 @@
 extern crate notify;
 
-use clap::{arg, Arg, Command as ClapCommand};
+use clap::{arg, Arg, ArgMatches, Command as ClapCommand};
 
 pub fn parse_args() -> clap::ArgMatches {
     let matches = ClapCommand::new("tcr")
@@ -57,4 +57,24 @@ pub fn parse_args() -> clap::ArgMatches {
         )
         .get_matches();
     matches
+}
+
+pub fn get_test_step(matches: &ArgMatches) -> Option<String> {
+    return matches.value_of("TEST STEP").map(|s| s.to_owned());
+}
+
+pub fn get_test_cmd_args(matches: &ArgMatches) -> Option<Vec<String>> {
+    let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
+
+    return match test_cmd_args {
+        Some(args) => {
+            let args_str = args
+                .clone()
+                .into_iter()
+                .map(|x| x.to_owned())
+                .collect::<Vec<String>>();
+            Some(args_str)
+        }
+        None => None,
+    };
 }

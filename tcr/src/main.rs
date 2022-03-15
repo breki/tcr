@@ -1,37 +1,22 @@
 extern crate notify;
 
 mod args;
+mod paths;
+mod testing;
+mod watch;
 
-use clap::ArgMatches;
-use notify::DebouncedEvent::{Create, Remove, Rename, Write};
-use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use notify::{watcher, RecursiveMode, Watcher};
 use regex::RegexSet;
-use std::io::Write as IoWrite;
-use std::path::Path;
-use std::process::Command;
 use std::sync::mpsc::channel;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Duration;
-use std::{fmt, io, thread};
-
-pub use args::parse_args;
-
-struct SourceCodeUpdateEvent {
-    path: String,
-    event_type: String,
-}
-
-impl fmt::Display for SourceCodeUpdateEvent {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {}", self.event_type, self.path)
-    }
-}
 
 fn main() {
     let matches = args::parse_args();
 
-    let test_step = get_test_step(&matches);
-    let test_cmd_args = get_test_cmd_args(&matches);
+    let test_step = args::get_test_step(&matches);
+    let test_cmd_args = args::get_test_cmd_args(&matches);
     let file_pattern = matches.value_of("FILE PATTERN").unwrap();
 
     let matching_files = RegexSet::new(&[file_pattern]).unwrap();
@@ -39,7 +24,7 @@ fn main() {
     let delay = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
     let watch_period = Duration::from_millis(delay);
 
-    let collected_events: Arc<Mutex<Vec<SourceCodeUpdateEvent>>> =
+    let collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>> =
         Arc::new(Mutex::new(Vec::new()));
     let (tx_collected_events, rx_collected_events) = channel();
 
@@ -48,7 +33,8 @@ fn main() {
         {
             let mut collected_events = collected_events_thread.lock().unwrap();
 
-            let mut events_to_process: Vec<SourceCodeUpdateEvent> = Vec::new();
+            let mut events_to_process: Vec<watch::SourceCodeUpdateEvent> =
+                Vec::new();
             while collected_events.len() > 0 {
                 let event = collected_events.pop().unwrap();
                 events_to_process.push(event);
@@ -72,7 +58,7 @@ fn main() {
 
                 match test_step {
                     Some(ref test_command) => {
-                        run_test(&test_command, &test_cmd_args)
+                        testing::run_test(&test_command, &test_cmd_args)
                     }
                     _ => {
                         println!("The test step has not been specified, doing nothing.")
@@ -109,7 +95,7 @@ fn main() {
                 // has passed.
                 let mut collected_events = collected_events.lock().unwrap();
 
-                handle_watch_events(
+                watch::handle_watch_events(
                     &event,
                     &matching_files,
                     &mut collected_events,
@@ -118,92 +104,4 @@ fn main() {
             Err(e) => println!("watch error: {:?}", e),
         }
     }
-}
-
-fn get_test_step(matches: &ArgMatches) -> Option<String> {
-    return matches.value_of("TEST STEP").map(|s| s.to_owned());
-}
-
-fn get_test_cmd_args(matches: &ArgMatches) -> Option<Vec<String>> {
-    let test_cmd_args = matches.values_of("TEST COMMAND ARGS");
-
-    return match test_cmd_args {
-        Some(args) => {
-            let args_str = args
-                .clone()
-                .into_iter()
-                .map(|x| x.to_owned())
-                .collect::<Vec<String>>();
-            Some(args_str)
-        }
-        None => None,
-    };
-}
-
-fn handle_watch_events(
-    event: &DebouncedEvent,
-    matching_files: &RegexSet,
-    collected_events: &mut Vec<SourceCodeUpdateEvent>,
-) {
-    let event_data: Option<SourceCodeUpdateEvent> = match event {
-        Create(path) => extract_event_data("create", &path, matching_files),
-        Remove(path) => extract_event_data("remove", &path, matching_files),
-        Rename(from_path, _) => {
-            extract_event_data("rename", &from_path, matching_files)
-        }
-        Write(path) => extract_event_data("write", &path, matching_files),
-        _ => None,
-    };
-
-    match event_data {
-        Some(event_data) => {
-            println!("{}", event_data);
-            collected_events.push(event_data);
-        }
-        None => (),
-    }
-}
-
-fn run_test(test_command: &str, test_cmd_args: &Option<Vec<String>>) {
-    let mut command = Command::new(test_command);
-
-    match test_cmd_args {
-        Some(ref args) => {
-            command.args(args);
-        }
-        None => (),
-    }
-
-    // todo now: print out the running command
-
-    let output = command.output().expect("failed to execute the test step");
-    io::stdout().write_all(&output.stdout).unwrap();
-    io::stderr().write_all(&output.stderr).unwrap();
-    // todo now: check the test exit code.
-    // In case of success, run commit.
-    // In case of failure, run reset.
-}
-
-fn extract_event_data(
-    event_desc: &str,
-    path: &Path,
-    matching_files: &RegexSet,
-) -> Option<SourceCodeUpdateEvent> {
-    if is_path_matched(&path, matching_files) {
-        Some(SourceCodeUpdateEvent {
-            path: path_to_str(&path),
-            event_type: event_desc.to_string(),
-        })
-    } else {
-        None
-    }
-}
-
-fn is_path_matched(path: &Path, matching_files: &RegexSet) -> bool {
-    return matching_files.is_match(&path_to_str(&path));
-}
-
-fn path_to_str(path: &Path) -> String {
-    let os_path_str = path.as_os_str();
-    os_path_str.to_str().unwrap().to_string()
 }
