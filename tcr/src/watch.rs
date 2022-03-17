@@ -17,12 +17,11 @@ impl fmt::Display for SourceCodeUpdateEvent {
     }
 }
 
-pub fn handle_watch_events(
+pub fn filter_interesting_event(
     event: &DebouncedEvent,
     matching_files: &RegexSet,
-    collected_events: &mut Vec<SourceCodeUpdateEvent>,
-) {
-    let event_data: Option<SourceCodeUpdateEvent> = match event {
+) -> Option<SourceCodeUpdateEvent> {
+    return match event {
         Create(path) => extract_event_data("create", &path, matching_files),
         Remove(path) => extract_event_data("remove", &path, matching_files),
         Rename(from_path, _) => {
@@ -31,14 +30,6 @@ pub fn handle_watch_events(
         Write(path) => extract_event_data("write", &path, matching_files),
         _ => None,
     };
-
-    match event_data {
-        Some(event_data) => {
-            println!("{}", event_data);
-            collected_events.push(event_data);
-        }
-        None => (),
-    }
 }
 
 fn extract_event_data(

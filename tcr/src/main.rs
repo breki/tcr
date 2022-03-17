@@ -14,12 +14,13 @@ use std::time::Duration;
 use watch::SourceCodeUpdateEvent;
 
 fn collect_watch_events(
-    rx: Receiver<DebouncedEvent>,
+    rx_watch_events: Receiver<DebouncedEvent>,
     collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>>,
+    tx_watch_events_starter: Sender<u32>,
     matching_files: RegexSet,
 ) {
     loop {
-        match rx.recv() {
+        match rx_watch_events.recv() {
             Ok(event) => {
                 // todo now: Instead of directly handling each individual event,
                 // they should be stored in a collection and handled in a single
@@ -27,11 +28,16 @@ fn collect_watch_events(
                 // has passed.
                 let mut collected_events = collected_events.lock().unwrap();
 
-                watch::handle_watch_events(
-                    &event,
-                    &matching_files,
-                    &mut collected_events,
-                );
+                match watch::filter_interesting_event(&event, &matching_files) {
+                    Some(event_data) => {
+                        println!("{}", event_data);
+                        if collected_events.len() == 0 {
+                            tx_watch_events_starter.send(1).unwrap();
+                        }
+                        collected_events.push(event_data);
+                    }
+                    None => (),
+                }
             }
             Err(e) => println!("watch error: {:?}", e),
         }
@@ -39,29 +45,38 @@ fn collect_watch_events(
 }
 
 fn group_events(
+    rx_watch_events_starter: Receiver<u32>,
     collected_events_thread: Arc<Mutex<Vec<SourceCodeUpdateEvent>>>,
     tx_collected_events: Sender<Vec<SourceCodeUpdateEvent>>,
     watch_period: Duration,
 ) {
     loop {
-        {
-            let mut collected_events = collected_events_thread.lock().unwrap();
+        match rx_watch_events_starter.recv() {
+            Ok(1) => {
+                println!("DETECTED FIRST CHANGE EVENT...");
+                thread::sleep(watch_period);
 
-            let mut events_to_process: Vec<SourceCodeUpdateEvent> = Vec::new();
-            while collected_events.len() > 0 {
-                let event = collected_events.pop().unwrap();
-                events_to_process.push(event);
-            }
-            match tx_collected_events.send(events_to_process) {
-                Ok(_) => (),
-                Err(e) => {
-                    println!("Error sending source code change events: {}", e);
+                let mut collected_events =
+                    collected_events_thread.lock().unwrap();
+
+                let mut events_to_process: Vec<SourceCodeUpdateEvent> =
+                    Vec::new();
+                while collected_events.len() > 0 {
+                    let event = collected_events.pop().unwrap();
+                    events_to_process.push(event);
+                }
+                match tx_collected_events.send(events_to_process) {
+                    Ok(_) => (),
+                    Err(e) => {
+                        println!(
+                            "Error sending source code change events: {}",
+                            e
+                        );
+                    }
                 }
             }
+            _ => (),
         }
-
-        println!("SLEEPER THREAD");
-        thread::sleep(watch_period);
     }
 }
 
@@ -107,21 +122,30 @@ fn main() {
     let (tx_collected_events, rx_collected_events) =
         channel::<Vec<SourceCodeUpdateEvent>>();
 
+    // Create a channel to receive the events.
+    let (tx_watch_events_starter, rx_watch_events_starter) = channel();
+
     let collected_events_thread = Arc::clone(&collected_events);
     thread::spawn(move || {
-        group_events(collected_events_thread, tx_collected_events, watch_period)
+        group_events(
+            rx_watch_events_starter,
+            collected_events_thread,
+            tx_collected_events,
+            watch_period,
+        )
     });
     thread::spawn(move || {
         run_tests_on_watch(rx_collected_events, test_step, test_cmd_args)
     });
 
     // Create a channel to receive the events.
-    let (tx, rx) = channel();
+    let (tx_watch_events, rx_watch_events) = channel();
 
     // Create a watcher object, delivering debounced events.
     // The notification back-end is selected based on the platform.
 
-    let mut watcher = watcher(tx, watch_period).unwrap();
+    let delay = Duration::from_millis(500);
+    let mut watcher = watcher(tx_watch_events, delay).unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
@@ -131,5 +155,10 @@ fn main() {
         .watch(path_to_watch, RecursiveMode::Recursive)
         .unwrap();
 
-    collect_watch_events(rx, collected_events, matching_files);
+    collect_watch_events(
+        rx_watch_events,
+        collected_events,
+        tx_watch_events_starter,
+        matching_files,
+    );
 }
