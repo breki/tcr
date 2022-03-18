@@ -50,7 +50,6 @@ fn run_tests_on_files_update(
     loop {
         match rx_watch_events_starter.recv() {
             Ok(1) => {
-                println!("DETECTED FIRST CHANGE EVENT...");
                 thread::sleep(watch_period);
 
                 {
@@ -60,7 +59,14 @@ fn run_tests_on_files_update(
 
                 match test_step {
                     Some(ref test_command) => {
-                        testing::run_test(&test_command, &test_cmd_args)
+                        match testing::run_test(&test_command, &test_cmd_args) {
+                            testing::TestsResult::SUCCESS => {
+                                println!("TESTS SUCCEEDED");
+                            }
+                            testing::TestsResult::FAILURE => {
+                                println!("TESTS FAILED");
+                            }
+                        }
                     }
                     _ => {
                         println!(
