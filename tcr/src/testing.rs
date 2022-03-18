@@ -20,8 +20,6 @@ pub fn run_test(
         None => (),
     }
 
-    // todo now: print out the running command
-
     let output = command.output().expect("failed to execute the test step");
     io::stdout().write_all(&output.stdout).unwrap();
     io::stderr().write_all(&output.stderr).unwrap();

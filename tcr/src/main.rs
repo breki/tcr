@@ -58,6 +58,8 @@ fn run_tests_on_files_update(
                     collected_events.clear();
                 }
 
+                print!("\x1B[2J");
+
                 match test_step {
                     Some(ref test_command) => {
                         match testing::run_test(&test_command, &test_cmd_args) {
