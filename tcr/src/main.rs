@@ -22,10 +22,6 @@ fn collect_watch_events(
     loop {
         match rx_watch_events.recv() {
             Ok(event) => {
-                // todo now: Instead of directly handling each individual event,
-                // they should be stored in a collection and handled in a single
-                // go, as soon as the 'delay' period from the first event time
-                // has passed.
                 let mut collected_events = collected_events.lock().unwrap();
 
                 match watch::filter_interesting_event(&event, &matching_files) {
@@ -44,11 +40,12 @@ fn collect_watch_events(
     }
 }
 
-fn group_events(
+fn run_tests_on_files_update(
     rx_watch_events_starter: Receiver<u32>,
-    collected_events_thread: Arc<Mutex<Vec<SourceCodeUpdateEvent>>>,
-    tx_collected_events: Sender<Vec<SourceCodeUpdateEvent>>,
+    collected_events: Arc<Mutex<Vec<SourceCodeUpdateEvent>>>,
     watch_period: Duration,
+    test_step: Option<String>,
+    test_cmd_args: Option<Vec<String>>,
 ) {
     loop {
         match rx_watch_events_starter.recv() {
@@ -56,51 +53,22 @@ fn group_events(
                 println!("DETECTED FIRST CHANGE EVENT...");
                 thread::sleep(watch_period);
 
-                let mut collected_events =
-                    collected_events_thread.lock().unwrap();
-
-                let mut events_to_process: Vec<SourceCodeUpdateEvent> =
-                    Vec::new();
-                while collected_events.len() > 0 {
-                    let event = collected_events.pop().unwrap();
-                    events_to_process.push(event);
+                {
+                    let mut collected_events = collected_events.lock().unwrap();
+                    collected_events.clear();
                 }
-                match tx_collected_events.send(events_to_process) {
-                    Ok(_) => (),
-                    Err(e) => {
-                        println!(
-                            "Error sending source code change events: {}",
-                            e
-                        );
-                    }
-                }
-            }
-            _ => (),
-        }
-    }
-}
-
-fn run_tests_on_watch(
-    rx_collected_events: Receiver<Vec<SourceCodeUpdateEvent>>,
-    test_step: Option<String>,
-    test_cmd_args: Option<Vec<String>>,
-) {
-    loop {
-        match rx_collected_events.recv() {
-            Ok(ref x) if !x.is_empty() => {
-                println!("TEST");
 
                 match test_step {
                     Some(ref test_command) => {
                         testing::run_test(&test_command, &test_cmd_args)
                     }
                     _ => {
-                        println!("The test step has not been specified, doing nothing.")
+                        println!(
+                            "The test step has not been specified, doing nothing.")
                     }
                 }
             }
-            Ok(_) => (),
-            Err(e) => println!("watch error: {:?}", e),
+            _ => (),
         }
     }
 }
@@ -117,25 +85,20 @@ fn main() {
     let delay = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
     let watch_period = Duration::from_millis(delay);
 
-    let collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>> =
-        Arc::new(Mutex::new(Vec::new()));
-    let (tx_collected_events, rx_collected_events) =
-        channel::<Vec<SourceCodeUpdateEvent>>();
-
     // Create a channel to receive the events.
     let (tx_watch_events_starter, rx_watch_events_starter) = channel();
 
-    let collected_events_thread = Arc::clone(&collected_events);
+    let collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>> =
+        Arc::new(Mutex::new(Vec::new()));
+    let collected_events_clone = Arc::clone(&collected_events);
     thread::spawn(move || {
-        group_events(
+        run_tests_on_files_update(
             rx_watch_events_starter,
-            collected_events_thread,
-            tx_collected_events,
+            collected_events_clone,
             watch_period,
+            test_step,
+            test_cmd_args,
         )
-    });
-    thread::spawn(move || {
-        run_tests_on_watch(rx_collected_events, test_step, test_cmd_args)
     });
 
     // Create a channel to receive the events.
