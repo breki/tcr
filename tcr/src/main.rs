@@ -51,14 +51,15 @@ fn run_tests_on_files_update(
     loop {
         match rx_watch_events_starter.recv() {
             Ok(1) => {
+                // clear the terminal
+                print!("\x1B[2J");
+
                 thread::sleep(watch_period);
 
                 {
                     let mut collected_events = collected_events.lock().unwrap();
                     collected_events.clear();
                 }
-
-                print!("\x1B[2J");
 
                 match test_step {
                     Some(ref test_command) => {
