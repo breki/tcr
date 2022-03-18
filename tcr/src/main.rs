@@ -15,14 +15,15 @@ use std::time::Duration;
 use watch::SourceCodeUpdateEvent;
 
 fn collect_watch_events(
+    files_watch_enabled: Arc<Mutex<bool>>,
     rx_watch_events: Receiver<DebouncedEvent>,
     collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>>,
     tx_watch_events_starter: Sender<u32>,
     matching_files: RegexSet,
 ) {
     loop {
-        match rx_watch_events.recv() {
-            Ok(event) => {
+        match (rx_watch_events.recv(), *files_watch_enabled.lock().unwrap()) {
+            (Ok(event), true) => {
                 let mut collected_events = collected_events.lock().unwrap();
 
                 match watch::filter_interesting_event(&event, &matching_files) {
@@ -36,15 +37,17 @@ fn collect_watch_events(
                     None => (),
                 }
             }
-            Err(e) => println!("watch error: {:?}", e),
+            (Ok(_), false) => (),
+            (Err(e), _) => println!("watch error: {:?}", e),
         }
     }
 }
 
 fn run_tests_on_files_update(
+    files_watch_enabled: Arc<Mutex<bool>>,
     rx_watch_events_starter: Receiver<u32>,
     collected_events: Arc<Mutex<Vec<SourceCodeUpdateEvent>>>,
-    watch_period: Duration,
+    delay: Duration,
     test_step: Option<String>,
     test_cmd_args: Option<Vec<String>>,
 ) {
@@ -54,7 +57,7 @@ fn run_tests_on_files_update(
                 // clear the terminal
                 print!("\x1B[2J");
 
-                thread::sleep(watch_period);
+                thread::sleep(delay);
 
                 {
                     let mut collected_events = collected_events.lock().unwrap();
@@ -70,13 +73,27 @@ fn run_tests_on_files_update(
                             }
                             testing::TestsResult::FAILURE => {
                                 println!("TESTS FAILED");
-                                git::git_revert();
+
+                                {
+                                    let mut files_watch_enabled =
+                                        files_watch_enabled.lock().unwrap();
+                                    *files_watch_enabled = false;
+
+                                    git::git_revert();
+                                    // todo now: prevent the watcher from issuing
+                                    // events for reverted files - using some kind
+                                    // of a signal/switch.
+
+                                    *files_watch_enabled = true;
+                                }
                             }
                         }
                     }
                     _ => {
                         println!(
-                            "The test step has not been specified, doing nothing.")
+                            "The test step has not been specified, \
+                            doing nothing."
+                        )
                     }
                 }
             }
@@ -94,20 +111,24 @@ fn main() {
 
     let matching_files = RegexSet::new(&[file_pattern]).unwrap();
 
-    let delay = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
-    let watch_period = Duration::from_millis(delay);
+    let delay_ms = matches.value_of("delay").unwrap().parse::<u64>().unwrap();
+    let delay = Duration::from_millis(delay_ms);
 
     // Create a channel to receive the events.
     let (tx_watch_events_starter, rx_watch_events_starter) = channel();
+
+    let files_watch_enabled: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
+    let files_watch_enabled_clone = Arc::clone(&files_watch_enabled);
 
     let collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>> =
         Arc::new(Mutex::new(Vec::new()));
     let collected_events_clone = Arc::clone(&collected_events);
     thread::spawn(move || {
         run_tests_on_files_update(
+            files_watch_enabled,
             rx_watch_events_starter,
             collected_events_clone,
-            watch_period,
+            delay,
             test_step,
             test_cmd_args,
         )
@@ -131,6 +152,7 @@ fn main() {
         .unwrap();
 
     collect_watch_events(
+        files_watch_enabled_clone,
         rx_watch_events,
         collected_events,
         tx_watch_events_starter,

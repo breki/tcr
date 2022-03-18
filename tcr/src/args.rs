@@ -45,7 +45,7 @@ pub fn parse_args() -> clap::ArgMatches {
                 .required(false)
                 .default_value("1000")
                 .help(
-                    "The delay (in milliseconds) between the first detected k\
+                    "The delay (in milliseconds) between the first detected \
                     file change and running the test step.",
                 )
                 .validator(|s| s.parse::<u64>()),
