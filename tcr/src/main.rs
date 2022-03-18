@@ -1,6 +1,7 @@
 extern crate notify;
 
 mod args;
+mod git;
 mod paths;
 mod testing;
 mod watch;
@@ -62,9 +63,11 @@ fn run_tests_on_files_update(
                         match testing::run_test(&test_command, &test_cmd_args) {
                             testing::TestsResult::SUCCESS => {
                                 println!("TESTS SUCCEEDED");
+                                git::git_commit();
                             }
                             testing::TestsResult::FAILURE => {
                                 println!("TESTS FAILED");
+                                git::git_revert();
                             }
                         }
                     }
