@@ -1,5 +1,3 @@
-use notify::DebouncedEvent;
-use notify::DebouncedEvent::{Create, Remove, Rename, Write};
 use regex::RegexSet;
 use std::fmt;
 use std::path::Path;
@@ -18,25 +16,11 @@ impl fmt::Display for SourceCodeUpdateEvent {
 }
 
 pub fn filter_interesting_event(
-    event: &DebouncedEvent,
-    matching_files: &RegexSet,
-) -> Option<SourceCodeUpdateEvent> {
-    return match event {
-        Create(path) => extract_event_data("create", &path, matching_files),
-        Remove(path) => extract_event_data("remove", &path, matching_files),
-        Rename(from_path, _) => {
-            extract_event_data("rename", &from_path, matching_files)
-        }
-        Write(path) => extract_event_data("write", &path, matching_files),
-        _ => None,
-    };
-}
-
-fn extract_event_data(
-    event_desc: &str,
     path: &Path,
+    event_desc: &str,
     matching_files: &RegexSet,
 ) -> Option<SourceCodeUpdateEvent> {
+    println!("{:?}", path);
     if paths::is_path_matched(&path, matching_files) {
         Some(SourceCodeUpdateEvent {
             path: paths::path_to_str(&path),

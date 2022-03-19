@@ -6,7 +6,7 @@ mod paths;
 mod testing;
 mod watch;
 
-use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+use notify::{raw_watcher, RawEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -16,29 +16,36 @@ use watch::SourceCodeUpdateEvent;
 
 fn collect_watch_events(
     files_watch_enabled: Arc<Mutex<bool>>,
-    rx_watch_events: Receiver<DebouncedEvent>,
+    rx_watch_events: Receiver<RawEvent>,
     collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>>,
     tx_watch_events_starter: Sender<u32>,
     matching_files: RegexSet,
 ) {
     loop {
         match (rx_watch_events.recv(), *files_watch_enabled.lock().unwrap()) {
-            (Ok(event), true) => {
-                let mut collected_events = collected_events.lock().unwrap();
+            (Ok(event), true) => match event.path {
+                Some(path) => {
+                    let mut collected_events = collected_events.lock().unwrap();
 
-                match watch::filter_interesting_event(&event, &matching_files) {
-                    Some(event_data) => {
-                        println!("{}", event_data);
-                        if collected_events.len() == 0 {
-                            tx_watch_events_starter.send(1).unwrap();
+                    match watch::filter_interesting_event(
+                        &path,
+                        "todo",
+                        &matching_files,
+                    ) {
+                        Some(event_data) => {
+                            println!("{}", event_data);
+                            if collected_events.len() == 0 {
+                                tx_watch_events_starter.send(1).unwrap();
+                            }
+                            collected_events.push(event_data);
                         }
-                        collected_events.push(event_data);
+                        None => (),
                     }
-                    None => (),
                 }
-            }
-            (Ok(_), false) => (),
+                None => (),
+            },
             (Err(e), _) => println!("watch error: {:?}", e),
+            (_, false) => (),
         }
     }
 }
@@ -140,8 +147,7 @@ fn main() {
     // Create a watcher object, delivering debounced events.
     // The notification back-end is selected based on the platform.
 
-    let delay = Duration::from_millis(500);
-    let mut watcher = watcher(tx_watch_events, delay).unwrap();
+    let mut watcher = raw_watcher(tx_watch_events).unwrap();
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
