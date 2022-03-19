@@ -89,11 +89,8 @@ fn run_tests_on_files_update(
                                 }
 
                                 git::git_revert();
-                                // todo now: prevent the watcher from issuing
-                                // events for reverted files - using some kind
-                                // of a signal/switch.
 
-                                thread::sleep(Duration::from_millis(2000));
+                                // thread::sleep(Duration::from_millis(2000));
 
                                 {
                                     let mut files_watch_enabled =
