@@ -20,7 +20,7 @@ pub fn filter_interesting_event(
     event_desc: &str,
     matching_files: &RegexSet,
 ) -> Option<SourceCodeUpdateEvent> {
-    println!("{:?}", path);
+    // println!("{:?}", path);
     if paths::is_path_matched(&path, matching_files) {
         Some(SourceCodeUpdateEvent {
             path: paths::path_to_str(&path),
