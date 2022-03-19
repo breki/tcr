@@ -92,6 +92,8 @@ fn run_tests_on_files_update(
                                     // events for reverted files - using some kind
                                     // of a signal/switch.
 
+                                    thread::sleep(Duration::from_millis(2000));
+
                                     *files_watch_enabled = true;
                                     println!("files watch enabled");
                                 }
