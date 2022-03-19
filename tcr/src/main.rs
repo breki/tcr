@@ -62,7 +62,7 @@ fn run_tests_on_files_update(
         match rx_watch_events_starter.recv() {
             Ok(1) => {
                 // clear the terminal
-                print!("\x1B[2J");
+                // print!("\x1B[2J");
 
                 thread::sleep(delay);
 
