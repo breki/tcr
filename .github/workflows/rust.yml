@@ -17,4 +17,4 @@ jobs:
         with:
           use-cross: true
           command: build
-          args: --targex86_64-pc-windows-msvct --release --all-features
+          args: --target x86_64-pc-windows-msvct --release --all-features
