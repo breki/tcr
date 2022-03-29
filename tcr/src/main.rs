@@ -90,8 +90,6 @@ fn run_tests_on_files_update(
 
                                 git::git_revert();
 
-                                // thread::sleep(Duration::from_millis(2000));
-
                                 {
                                     let mut files_watch_enabled =
                                         files_watch_enabled.lock().unwrap();
