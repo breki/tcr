@@ -29,7 +29,6 @@ fn collect_watch_events(
 
                     match watch::filter_interesting_event(
                         &path,
-                        "todo",
                         &matching_files,
                     ) {
                         Some(event_data) => {
