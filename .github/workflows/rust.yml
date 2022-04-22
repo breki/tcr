@@ -27,11 +27,11 @@ jobs:
           args: --release
       - name: Create Release
         id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: uses: "marvinpinto/action-automatic-releases@latest"
         with:
+          repo_token: "${{ secrets.GITHUB_TOKEN }}"
           tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
+          title: Release ${{ github.ref }}
           prerelease: false
+          files: |
+            target/release/tcr.exe
