@@ -31,7 +31,10 @@ jobs:
       # We don't need the repo, grab all artifacts from the build stage
       # The plugin puts each artifact in a folder of `artifactname`
       - uses: actions/download-artifact@v2
-      
+
+      - name: Display fetched artifacts
+        run: ls -R
+        
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
           title: "TCR ${{github.ref_name}}"
