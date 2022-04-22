@@ -17,7 +17,7 @@ jobs:
         with:
           command: build
           args: --release
-      - uses: actions/upload-artifacts@v3
+      - uses: actions/upload-artifact@v3
         with:
           name: tcr-${{ matrix.os }}
           path: target/release/tcr[.exe]
