@@ -20,4 +20,6 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: tcr-${{ matrix.os }}
-          path: target/release/tcr[.exe]
+          path: |
+            target/release/tcr
+            target/release/tcr.exe
