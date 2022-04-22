@@ -16,7 +16,7 @@ jobs:
           command: build
           args: --release
       - name: Create Release
-        id: create_release
+        id: create_release_win
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
@@ -35,7 +35,7 @@ jobs:
           command: build
           args: --release
       - name: Create Release
-        id: create_release
+        id: create_release_linux
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
