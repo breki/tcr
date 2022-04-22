@@ -20,7 +20,7 @@ jobs:
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          title: "Windows Release"
+          title: "Windows Release ${{github.ref_name}}"
           prerelease: false
           files: |
             target/release/tcr.exe
@@ -39,7 +39,7 @@ jobs:
         uses: "marvinpinto/action-automatic-releases@latest"
         with:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
-          title: "Linux Release"
+          title: "Linux Release ${{github.ref_name}}"
           prerelease: false
           files: |
             target/release/tcr
