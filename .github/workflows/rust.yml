@@ -33,4 +33,4 @@ jobs:
           title: Release ${{ github.ref }}
           prerelease: false
           files: |
-            target/release/tcr.exe
+            target/release/tcr
