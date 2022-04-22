@@ -41,5 +41,5 @@ jobs:
           repo_token: "${{ secrets.GITHUB_TOKEN }}"
           prerelease: false
           files: |
-            tcr-windows-latest/*.zip
-            tcr-ubuntu-latest/*.zip
+            tcr-windows-latest/tcr.exe
+            tcr-ubuntu-latest/tcr
