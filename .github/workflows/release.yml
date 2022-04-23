@@ -17,12 +17,12 @@ jobs:
         with:
           command: build
           args: --release
+      - name: zip artifacts
+        run: zip tcr-${{ matrix.os }}.zip target/release/tcr target/release/tcr.exe
       - uses: actions/upload-artifact@v3
         with:
           name: tcr-${{ matrix.os }}
-          path: |
-            target/release/tcr
-            target/release/tcr.exe
+          path: tcr-${{ matrix.os }}.zip
   release:
     needs: build
     runs-on: ubuntu-latest
