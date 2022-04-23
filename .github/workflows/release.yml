@@ -9,7 +9,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest]    
+        os: [ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -17,8 +17,12 @@ jobs:
         with:
           command: build
           args: --release
-      - name: zip artifacts
-        run: zip tcr-${{ matrix.os }}.zip target/release/tcr target/release/tcr.exe
+      - name: Zip artifacts
+        if: matrix.os == 'ubuntu-latest'
+        run: zip tcr-${{ matrix.os }}.zip target/release/tcr
+      - name: Zip artifacts
+        if: matrix.os == 'windows-latest'
+        run: 7z tcr-${{ matrix.os }}.zip target/release/tcr.exe
       - uses: actions/upload-artifact@v3
         with:
           name: tcr-${{ matrix.os }}
