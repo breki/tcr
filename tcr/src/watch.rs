@@ -4,6 +4,7 @@ use std::path::Path;
 
 use crate::paths;
 
+#[derive(PartialEq, Eq, Hash)]
 pub struct SourceCodeUpdateEvent {
     path: String,
 }

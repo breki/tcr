@@ -8,6 +8,7 @@ mod watch;
 
 use notify::{raw_watcher, RawEvent, RecursiveMode, Watcher};
 use regex::RegexSet;
+use std::collections::HashSet;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -17,7 +18,7 @@ use watch::SourceCodeUpdateEvent;
 fn collect_watch_events(
     files_watch_enabled: Arc<Mutex<bool>>,
     rx_watch_events: Receiver<RawEvent>,
-    collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>>,
+    collected_events: Arc<Mutex<HashSet<watch::SourceCodeUpdateEvent>>>,
     tx_watch_events_starter: Sender<u32>,
     matching_files: RegexSet,
 ) {
@@ -32,11 +33,14 @@ fn collect_watch_events(
                         &matching_files,
                     ) {
                         Some(event_data) => {
-                            println!("{}", event_data);
+                            if !collected_events.contains(&event_data) {
+                                println!("{}", event_data);
+                            }
+
                             if collected_events.len() == 0 {
                                 tx_watch_events_starter.send(1).unwrap();
                             }
-                            collected_events.push(event_data);
+                            collected_events.insert(event_data);
                         }
                         None => (),
                     }
@@ -52,7 +56,7 @@ fn collect_watch_events(
 fn run_tests_on_files_update(
     files_watch_enabled: Arc<Mutex<bool>>,
     rx_watch_events_starter: Receiver<u32>,
-    collected_events: Arc<Mutex<Vec<SourceCodeUpdateEvent>>>,
+    collected_events: Arc<Mutex<HashSet<SourceCodeUpdateEvent>>>,
     delay: Duration,
     test_step: Option<String>,
     test_cmd_args: Option<Vec<String>>,
@@ -131,8 +135,8 @@ fn main() {
     let files_watch_enabled: Arc<Mutex<bool>> = Arc::new(Mutex::new(true));
     let files_watch_enabled_clone = Arc::clone(&files_watch_enabled);
 
-    let collected_events: Arc<Mutex<Vec<watch::SourceCodeUpdateEvent>>> =
-        Arc::new(Mutex::new(Vec::new()));
+    let collected_events: Arc<Mutex<HashSet<watch::SourceCodeUpdateEvent>>> =
+        Arc::new(Mutex::new(HashSet::new()));
     let collected_events_clone = Arc::clone(&collected_events);
     thread::spawn(move || {
         run_tests_on_files_update(
