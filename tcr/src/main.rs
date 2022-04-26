@@ -33,13 +33,17 @@ fn collect_watch_events(
                         &matching_files,
                     ) {
                         Some(event_data) => {
+                            if collected_events.len() == 0 {
+                                // clear the terminal
+                                print!("\x1B[2J");
+                                println!("DETECTED CHANGES:");
+                                tx_watch_events_starter.send(1).unwrap();
+                            }
+
                             if !collected_events.contains(&event_data) {
                                 println!("{}", event_data);
                             }
 
-                            if collected_events.len() == 0 {
-                                tx_watch_events_starter.send(1).unwrap();
-                            }
                             collected_events.insert(event_data);
                         }
                         None => (),
@@ -64,9 +68,6 @@ fn run_tests_on_files_update(
     loop {
         match rx_watch_events_starter.recv() {
             Ok(1) => {
-                // clear the terminal
-                // print!("\x1B[2J");
-
                 thread::sleep(delay);
 
                 {
