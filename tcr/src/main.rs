@@ -72,6 +72,7 @@ fn run_tests_on_files_update(
 
                 match test_step {
                     Some(ref test_command) => {
+                        println!("RUNNING TESTS...");
                         match testing::run_test(&test_command, &test_cmd_args) {
                             testing::TestsResult::SUCCESS => {
                                 println!("TESTS SUCCEEDED");
