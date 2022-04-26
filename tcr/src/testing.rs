@@ -21,7 +21,8 @@ pub fn run_test(
     }
 
     let output = command.output().expect("failed to execute the test step");
-    io::stdout().write_all(&output.stdout).unwrap();
+    // disabled stdout output since it seems to just repeat stderr one
+    // io::stdout().write_all(&output.stdout).unwrap();
     io::stderr().write_all(&output.stderr).unwrap();
 
     match command.status() {
