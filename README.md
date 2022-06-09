@@ -78,4 +78,6 @@ OPTIONS:
 
 ## Some notes
 
+- When the tool reverts the code after a failed test, it does not rerun the tests (even though the code on the disk has been changed). This is on purpose: we want to be able to see the output of the last failed test.
+
 ## More on "test && commit || revert" workflow
