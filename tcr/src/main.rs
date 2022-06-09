@@ -90,7 +90,6 @@ fn run_tests_on_files_update(
                                     let mut files_watch_enabled =
                                         files_watch_enabled.lock().unwrap();
                                     *files_watch_enabled = false;
-                                    println!("files watch disabled");
                                 }
 
                                 git::git_revert();
@@ -99,7 +98,6 @@ fn run_tests_on_files_update(
                                     let mut files_watch_enabled =
                                         files_watch_enabled.lock().unwrap();
                                     *files_watch_enabled = true;
-                                    println!("files watch enabled");
                                 }
                             }
                         }
